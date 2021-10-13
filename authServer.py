@@ -20,7 +20,7 @@ port = 1555
 server_socket.bind((LOCALHOST,port))
 server_socket.listen(5)
 
-print("AuthServer started...")
+print("[*] AuthServer started...")
 
 client_sockets,addr=server_socket.accept()
 
@@ -31,6 +31,7 @@ mydb = mysql.connector.connect(
   password="6633",
   database="kerberos"
 )
+cursor = mydb.cursor()
 
 # Setting up aes-cbc encryption
 def encrypt(data, key, service):
@@ -57,16 +58,17 @@ def decrypt(json_input):
         pt = unpad(cipher.decrypt(ct), AES.block_size)
         return pt
     except ValueError:
-        return "Incorrect decryption"
+        return "\n[*] Incorrect decryption"
 
-cursor = mydb.cursor()
-
+# Send ticket granting ticket back to client
 def sendTGT(Kat, nonce, ts, lifetime, Kst, sender, Kas):
+    # Sncrypted message for tgs
     message = Kat + "," + nonce + "," + str(ts) + "," + str(lifetime) + ",tgs"
     message = message.encode()
 
     message_encrypt = encrypt(message, Kas, "client")
     
+    # pass key the client passes to tgs
     pass_key = Kat + "," + sender + "," + str(lifetime)
     pass_key = pass_key.encode()
 
@@ -78,9 +80,8 @@ def sendTGT(Kat, nonce, ts, lifetime, Kst, sender, Kas):
     dictPE.update(dictME)
 
     final_message = json.dumps(dictPE)
-    print("my final message...\n" + final_message)
     client_sockets.send(final_message.encode("ascii"))
-    print("sent key and pass to client\n")
+    print("\n[*] Sent encrypted message: (Kat, N, T, L, TGS) and pass key: (Kat, a, L) to client\n")
 
 def checkValidation(ts, lifetime):
     ts_check = datetime.datetime.strptime(ts, '%H:%M:%S')
@@ -106,9 +107,9 @@ while True:
     sender = ''
     nonce = ''
     if len(message) == 0:
-        print("Invalid request")
+        print("\n[*] Invalid request")
     else:
-        # get request from client
+        # Get request from client
         sender = message[0]
         requestedService = message[1]
         nonce = message[2]
@@ -123,11 +124,11 @@ while True:
             results = cursor.fetchall()
 
             if results == None:
-                print("User doesn't exist")
+                print("\n[*] User doesn't exist")
                 isPreset = False
             else:
-                print("User and requested service exist\n")
-                print("Creating and sending Kat to a...\n")
+                print("\n[*] User and requested service exist\n")
+                print("\n[*] Creating and sending Kat to client...\n")
                 isPreset = True
         except:
             mydb.rollback()
@@ -135,7 +136,7 @@ while True:
     if isPreset == False:
         continue
     
-    # store Kat, ts and lifetime in db, check if the key is valid 
+    # Store Kat, ts and lifetime in db, check if the key is valid 
     sql_Kat_del = "DELETE FROM long_term_key WHERE ltk_client = %s"
     sql_Kat_del_data = [(sender)]
 
@@ -148,16 +149,17 @@ while True:
         print("\nrolling back on sql_Kat_del")
 
     Kat = Random.get_random_bytes(16)
-    # storing Kat as base64 string in db
+    # Storing Kat as base64 string in db
     Kat_b64 = b64encode(Kat).decode('utf-8')
     now = datetime.datetime.now()
     formatted_time = now.strftime('%H:%M:%S')
     lifetime = 600 # seconds
 
-    # store Kat in db (as it is a long-term key)
+    # Store Kat in db (as it is a long-term key)
     sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
     sql_Kat_data = (sender, Kat_b64, formatted_time, lifetime, nonce)
-        
+    print("\n[*] Storing Kat in db: ", Kat)
+
     try:
         cursor.execute(sql_Kat, sql_Kat_data)
         mydb.commit()
@@ -166,7 +168,7 @@ while True:
         mydb.rollback()
         print("\nrolling back on sql_Kat")
     
-    # get Kst from db
+    # Get Kst from db
     sql_Kst = ("SELECT user_password FROM shared_keys WHERE user_name=%s")
     sql_Kst_data = [('tgs')]
 
@@ -178,8 +180,9 @@ while True:
         print("Exception thrown: {0}".format(error))
         mydb.rollback()
         print("\nrolling back on Kst")
-    
-    # get Kas from db
+
+    print("\n[*] Got Kst from db: ", b64decode(Kst_b64))
+    # Get Kas from db
     sql_get_Kas = ("SELECT user_password FROM shared_keys WHERE user_name=%s")
     sql_get_Kas_data = [(sender)]
 
@@ -192,11 +195,13 @@ while True:
         mydb.rollback()
         print("\nrolling back on kas")
 
-    # send Kat back to client with
+    print("\n[*] Got Kas from db: ", b64decode(Kas_b64))
+    # Send Kat back to client with
     Kas = b64decode(Kas_b64)
     Kst = b64decode(Kst_b64)
     sendTGT(Kat_b64, nonce, formatted_time, lifetime, Kst, sender, Kas)
 
+    # Breaking for demo
     client_sockets.close()
     break
 
