@@ -6,7 +6,8 @@ from Crypto.Cipher import AES
 import datetime
 
 Kbt = "tSJf8oFYd7LZkmhL+AGTog=="
-secret_owned_by_fs = "$$$$Extremely Secret Message$$$$"
+secret_owned_by_fs_A = "$$$$Extremely Secret First Message$$$$"
+secret_owned_by_fs_B = "###$$$SECRETB"
 
 # setting up socket
 server_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -41,7 +42,24 @@ def decrypt(json_input):
         return pt
     except ValueError:
         return "\n[*] Incorrect decryption"
-    
+
+# Check if a key is valid or not
+def checkValidation(ts, lifetime):
+    valid_until = datetime.datetime.strptime(ts, '%H:%M:%S')
+    valid_until = valid_until + datetime.timedelta(seconds=int(lifetime))
+    valid_until = valid_until.time()
+
+    now = datetime.datetime.now()
+    current_time = now.strftime('%H:%M:%S')
+    current_time = datetime.datetime.strptime(current_time, '%H:%M:%S')
+
+    if(current_time.time() < valid_until):
+        # print("[*] Key still valid")
+        return True
+    else:
+        # print("[*] Invalid key")
+        return False
+
 while(True):
     # Get request from client
     msg_received = client_sockets.recv(4096)
@@ -64,6 +82,9 @@ while(True):
 
     b64 = json.loads(message_recieved)
     Kab_b64 = b64["Kab"]
+    Kab_ts = b64["formatted_time"]
+    Kab_lifetime = b64["lifetime"]
+
     Kab = b64decode(Kab_b64)
     print("\n[*] Got Kab: ", Kab_b64)
 
@@ -85,28 +106,45 @@ while(True):
     new_time_encrypt = encrypt(new_time.encode(), Kab)
     client_sockets.send(new_time_encrypt.encode("ascii"))
 
-    # sending secret to client if Kab is valid
-    msg_received = client_sockets.recv(4096)
-    msg_received = msg_received.decode()
+    while True:
+        # sending secret to client if Kab is valid
+        msg_received = client_sockets.recv(4096)
+        msg_received = msg_received.decode()
+        if(checkValidation(Kab_ts, Kab_lifetime) == False):
+            final_message = encrypt("Session expired".encode(), Kab)
+            
+            client_sockets.send(final_message.encode())
+            break
 
-    b64 = json.loads(msg_received)
-    iv_to_fs = b64['iv_to_tgs']
-    ciphertext_to_fs = b64['ciphertext_to_tgs']
+        b64 = json.loads(msg_received)
+        iv_to_fs = b64['iv_to_tgs']
+        ciphertext_to_fs = b64['ciphertext_to_tgs']
 
-    message_from_client = json.dumps({'iv_client': iv_to_fs, 'ciphertext_client': ciphertext_to_fs, 'key': Kab_b64})
-    message_from_client_decrypted = decrypt(message_from_client).decode()
+        message_from_client = json.dumps({'iv_client': iv_to_fs, 'ciphertext_client': ciphertext_to_fs, 'key': Kab_b64})
+        message_from_client_decrypted = decrypt(message_from_client).decode()
 
-    if(message_from_client_decrypted == "giveSecret"):
-        # send secret
-        final_message = secret_owned_by_fs
-        final_message = encrypt(final_message.encode(), Kab)
-        
-        client_sockets.send(final_message.encode())
-        print("\n[*] Sending encrypted secret to client\n")
-    else:
-        print("\n[*] Incorrect Kab")
-        client_sockets.close()
-        break
+        if(message_from_client_decrypted == "getSecretA"):
+            # send secret
+            final_message = secret_owned_by_fs_A
+            final_message = encrypt(final_message.encode(), Kab)
+            
+            client_sockets.send(final_message.encode())
+            print("\n[*] Sending encrypted secret to client\n")
+        elif(message_from_client_decrypted == "getSecretB"):
+            # send secret
+            final_message = secret_owned_by_fs_B
+            final_message = encrypt(final_message.encode(), Kab)
+            
+            client_sockets.send(final_message.encode())
+            print("\n[*] Sending encrypted secret to client\n")
+        elif(message_from_client_decrypted == "exit"):
+            break
+        else:
+            # send response
+            final_message = encrypt("Incorrect Request".encode(), Kab)
+            
+            client_sockets.send(final_message.encode())
+            print("\n[*] Sending encrypted secret to client\n")
     client_sockets.close()
     break
 

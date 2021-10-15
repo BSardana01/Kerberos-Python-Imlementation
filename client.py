@@ -66,6 +66,11 @@ def encrypt(data, key):
 
     return result
 
+def killSockets():
+    server_socket_AS.close()
+    server_socket_TGS.close()
+    server_socket_FS.close()
+
 while True:
     # send a request to auth server
     nonce = uuid.uuid4().hex
@@ -147,6 +152,9 @@ while True:
     message_from_tgs_decrypted = json.loads(message_from_tgs_decrypted)
 
     Kab_b64 = message_from_tgs_decrypted['Kab']
+    Kab_ts = message_from_tgs_decrypted['formatted_time']
+    Kab_lifetime = message_from_tgs_decrypted['lifetime']
+
     print("\n[*] Kab received: ", Kab_b64)
 
     # sending request and pass to fileServer
@@ -207,28 +215,37 @@ while True:
 
     if TCheck == True:
         # request secret message
-        final_message = "giveSecret"
-        final_message = encrypt(final_message.encode(), b64decode(Kab_b64))
-        
-        print("\n[*] Requesting secret message from FileServer\n")
-        server_socket_FS.send(final_message.encode())
+        while True:
+            final_message = input("Enter request: (getSecretA, getSecretB): ")
+            final_message_exit = final_message
+            # final_message = "giveSecret"
+            
+            final_message = encrypt(final_message.encode(), b64decode(Kab_b64))
+                
+            print("\n[*] Requesting secret message from FileServer\n")
+            server_socket_FS.send(final_message.encode())
 
-        # get secret message
-        msg_received = server_socket_FS.recv(4096)
-        msg_received = msg_received.decode()
+            if(final_message_exit == "exit"):
+                killSockets()
+                break
+            # get secret message
+            msg_received = server_socket_FS.recv(4096)
+            msg_received = msg_received.decode()
 
-        b64 = json.loads(msg_received)
-        iv_pass = b64["iv_pass"]
-        ciphertext_pass = b64["ciphertext_pass"]
-        message_to_decrypt = json.dumps({'iv_client':iv_pass, 'ciphertext_client':ciphertext_pass, 'key':Kab_b64})
-        message_from_fs_decrypted = decrypt(message_to_decrypt).decode()
+            b64 = json.loads(msg_received)
+            iv_pass = b64["iv_pass"]
+            ciphertext_pass = b64["ciphertext_pass"]
+            message_to_decrypt = json.dumps({'iv_client':iv_pass, 'ciphertext_client':ciphertext_pass, 'key':Kab_b64})
+            message_from_fs_decrypted = decrypt(message_to_decrypt).decode()
 
-        print("\n[*] Secret received from fileServer: ", message_from_fs_decrypted)
+            print("\n[*] Secret received from fileServer: ", message_from_fs_decrypted)
     else:
         print("\n[*] Time check failed")
+        killSockets()
         break
 
-    server_socket_AS.close()
-    server_socket_TGS.close()
-    server_socket_FS.close()
+    # server_socket_AS.close()
+    # server_socket_TGS.close()
+    # server_socket_FS.close()
+    killSockets()
     break

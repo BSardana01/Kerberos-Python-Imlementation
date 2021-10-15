@@ -4,6 +4,7 @@ from Crypto.Util.Padding import pad, unpad
 import json
 from Crypto.Cipher import AES
 from Crypto import Random
+import datetime
 
 # shared key with authServer (long term)
 Kst = "m2ao3jabyAOswVJn6Fp4zA=="
@@ -80,19 +81,23 @@ while(True):
     Kab = Random.get_random_bytes(16)
     Kab_b64 = b64encode(Kab).decode('utf-8')
     nonce1 = message_from_client_decrypted['nonce']
-    formatted_time = message_from_client_decrypted['formatted_time']
+    now = datetime.datetime.now()
+    formatted_time = now.strftime('%H:%M:%S')
+    lifetime = 600
 
     message_back_to_client = json.dumps({
         'Kab': Kab_b64,
         'formatted_time': formatted_time,
         'service': 'b',
         'nonce': nonce1,
+        'lifetime': lifetime
     })
     message_back_to_client_encrypt = encrypt(message_back_to_client.encode(), b64decode(Kat), "")
     
     pass_key = json.dumps({
         'Kab': Kab_b64,
         'sender': message_from_client_decrypted['sender'],
+        'formatted_time': formatted_time,
         'lifetime': 60
     })
     pass_key_encrypted = encrypt(pass_key.encode(), b64decode(Kbt), "pass")

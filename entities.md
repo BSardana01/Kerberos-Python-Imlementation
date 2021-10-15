@@ -7,3 +7,22 @@
 
 4. The file server: This is the server our client is trying to access.
     
+
+Steps:
+1. Run all the servers
+2. Run client, 
+    TAKE INPUT in while True (EXIT FOR INPUT "exit")
+    2.1 Check if a valid Kat(ltk) is present
+        2.1.1 If it is present and valid, just use it
+        2.1.2 Otherwise, create a new one and store in db
+
+    2.2 Check if local variable Kab is set (i.e there is a valid Kab already present)
+        2.2.1 If Kab is present and valid, use it to communicate with fileServer
+        2.2.2 Otherwise, create a new one and store it locally (not in db as it is short-lived)
+
+Everytime, Kab expires, the client will send a request to TGS and TGS first checks if Kat is valid. If Kat expires at this point, a new Kat is created and for the the client has to send a request to the authServer
+
+TODO: 
+1. Change the structure of client, input should be read first in While True
+2. TGS should also check if Kat is valid not just authServer
+3. Use more functions everywhere

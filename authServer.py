@@ -83,20 +83,21 @@ def sendTGT(Kat, nonce, ts, lifetime, Kst, sender, Kas):
     client_sockets.send(final_message.encode("ascii"))
     print("\n[*] Sent encrypted message: (Kat, N, T, L, TGS) and pass key: (Kat, a, L) to client\n")
 
+# Check if a key is valid or not
 def checkValidation(ts, lifetime):
     valid_until = datetime.datetime.strptime(ts, '%H:%M:%S')
     valid_until = valid_until + datetime.timedelta(seconds=int(lifetime))
-    valid_until = valid_until.time().strftime('%H:%M:%S')
+    valid_until = valid_until.time()
 
     now = datetime.datetime.now()
     current_time = now.strftime('%H:%M:%S')
     current_time = datetime.datetime.strptime(current_time, '%H:%M:%S')
 
-    if(current_time <= valid_until):
-        print("[*] Key still valid")
+    if(current_time.time() < valid_until):
+        # print("[*] Key still valid")
         return True
     else:
-        print("[*] Invalid key")
+        # print("[*] Invalid key")
         return False
 
 while True:
@@ -107,6 +108,11 @@ while True:
     isPreset = False
     sender = ''
     nonce = ''
+    
+    Kat_b64_db = ''
+    ts_db = '' 
+    lifetime_db = '' 
+    nonce_db = ''
     if len(message) == 0:
         print("\n[*] Invalid request")
     else:
@@ -137,38 +143,94 @@ while True:
     if isPreset == False:
         break
     
-    # Store Kat, ts and lifetime in db, check if the key is valid 
-    sql_Kat_del = "DELETE FROM long_term_key WHERE ltk_client = %s"
-    sql_Kat_del_data = [(sender)]
-
-    try:
-        cursor.execute(sql_Kat_del, sql_Kat_del_data)
-        mydb.commit()
-    except Exception as error:
-        print("Exception thrown: {0}".format(error))
-        mydb.rollback()
-        print("\nrolling back on sql_Kat_del")
-
-    Kat = Random.get_random_bytes(16)
-    # Storing Kat as base64 string in db
-    Kat_b64 = b64encode(Kat).decode('utf-8')
+    # Store Kat, ts and lifetime in db, check if the key is valid
+    isKatPresent = False
+    Kat_b64 = ''
     now = datetime.datetime.now()
     formatted_time = now.strftime('%H:%M:%S')
     lifetime = 600 # seconds
 
-    # Store Kat in db (as it is a long-term key)
-    sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
-    sql_Kat_data = (sender, Kat_b64, formatted_time, lifetime, nonce)
-    print("\n[*] Storing Kat in db: ", Kat)
+    sql_check_kat = "SELECT ltk_key, ltk_ts, ltk_lifetime, ltk_nonce FROM long_term_key WHERE ltk_client=%s"
+    sql_check_kat_data = [(sender)]
 
     try:
-        cursor.execute(sql_Kat, sql_Kat_data)
-        mydb.commit()
+        cursor.execute(sql_check_kat, sql_check_kat_data)
+        row_count = cursor.rowcount
+        results = cursor.fetchall()
+        
+        if(len(results) != 0):
+            isKatPresent = True
+            Kat_b64_db = results[0][0]
+            ts_db = results[0][1]
+            lifetime_db = results[0][2]
+            nonce_db = results[0][3]
+
+            # print("Kat_b64_db: ", Kat_b64_db)
+            # print(type(Kat_b64_db), type(ts_db), type(lifetime_db), type(nonce_db))
     except Exception as error:
         print("Exception thrown: {0}".format(error))
         mydb.rollback()
-        print("\nrolling back on sql_Kat")
-    
+        print("\nrolling back on sql_Kat_check")
+
+    if isKatPresent == True:
+        if checkValidation(ts_db, lifetime_db) == True:
+            print("[*] Valid Kat found")
+            Kat_b64 = Kat_b64_db
+            lifetime = lifetime_db
+            nonce = nonce_db
+            formatted_time = ts_db
+        else:
+            print("[*] Kat is present but not valid\n")
+            print("[*] Creating new Kat...")
+            sql_Kat_del = "DELETE FROM long_term_key WHERE ltk_client=%s"
+            sql_Kat_del_data = [(sender)]
+
+            try:
+                cursor.execute(sql_Kat_del, sql_Kat_del_data)
+                mydb.commit()
+            except Exception as error:
+                print("Exception thrown: {0}".format(error))
+                mydb.rollback()
+                print("\nrolling back on sql_Kat_del")
+
+            Kat = Random.get_random_bytes(16)
+            # Storing Kat as base64 string in db
+            Kat_b64 = b64encode(Kat).decode('utf-8')
+            now = datetime.datetime.now()
+            formatted_time = now.strftime('%H:%M:%S')
+            lifetime = 600 # seconds
+
+            # Store Kat in db (as it is a long-term key)
+            sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
+            sql_Kat_data = (sender, Kat_b64, formatted_time, lifetime, nonce)
+            print("\n[*] Storing Kat in db: ", Kat)
+
+            try:
+                cursor.execute(sql_Kat, sql_Kat_data)
+                mydb.commit()
+            except Exception as error:
+                print("Exception thrown: {0}".format(error))
+                mydb.rollback()
+                print("\nrolling back on sql_Kat")
+    else:
+        Kat = Random.get_random_bytes(16)
+        # Storing Kat as base64 string in db
+        Kat_b64 = b64encode(Kat).decode('utf-8')
+        now = datetime.datetime.now()
+        formatted_time = now.strftime('%H:%M:%S')
+        lifetime = 600 # second
+        # Store Kat in db (as it is a long-term key)
+        sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
+        sql_Kat_data = (sender, Kat_b64, formatted_time, lifetime, nonce)
+        print("\n[*] Storing Kat in db: ", Kat_b64)
+        try:
+            cursor.execute(sql_Kat, sql_Kat_data)
+            mydb.commit()
+        except Exception as error:
+            print("Exception thrown: {0}".format(error))
+            mydb.rollback()
+            print("\nrolling back on sql_Kat")
+
     # Get Kst from db
     sql_Kst = ("SELECT user_password FROM shared_keys WHERE user_name=%s")
     sql_Kst_data = [('tgs')]
