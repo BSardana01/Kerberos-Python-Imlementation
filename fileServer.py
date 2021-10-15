@@ -43,7 +43,7 @@ def decrypt(json_input):
         return "\n[*] Incorrect decryption"
     
 while(True):
-    # GEt request from client
+    # Get request from client
     msg_received = client_sockets.recv(4096)
     msg_received = msg_received.decode()
 

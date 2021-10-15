@@ -6,9 +6,9 @@
 import socket
 from base64 import b64encode, b64decode
 from Crypto.Util.Padding import pad, unpad
-import json
 from Crypto.Cipher import AES
 from Crypto import Random
+import json
 import mysql.connector
 import datetime
 
@@ -84,18 +84,19 @@ def sendTGT(Kat, nonce, ts, lifetime, Kst, sender, Kas):
     print("\n[*] Sent encrypted message: (Kat, N, T, L, TGS) and pass key: (Kat, a, L) to client\n")
 
 def checkValidation(ts, lifetime):
-    ts_check = datetime.datetime.strptime(ts, '%H:%M:%S')
+    valid_until = datetime.datetime.strptime(ts, '%H:%M:%S')
+    valid_until = valid_until + datetime.timedelta(seconds=int(lifetime))
+    valid_until = valid_until.time().strftime('%H:%M:%S')
 
-    formatted_time = datetime.datetime.now()
-    current_validation = datetime.timedelta(0, int(lifetime))
-    print("current_validation: ")
-    print(type(current_validation), type(ts_check))
+    now = datetime.datetime.now()
+    current_time = now.strftime('%H:%M:%S')
+    current_time = datetime.datetime.strptime(current_time, '%H:%M:%S')
 
-    if((ts_check + current_validation) <= formatted_time):
-        print("valid key\n")
+    if(current_time <= valid_until):
+        print("[*] Key still valid")
         return True
     else:
-        print("Invalid key\n")
+        print("[*] Invalid key")
         return False
 
 while True:
@@ -134,7 +135,7 @@ while True:
             mydb.rollback()
     
     if isPreset == False:
-        continue
+        break
     
     # Store Kat, ts and lifetime in db, check if the key is valid 
     sql_Kat_del = "DELETE FROM long_term_key WHERE ltk_client = %s"
