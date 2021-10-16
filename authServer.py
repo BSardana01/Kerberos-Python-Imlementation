@@ -141,6 +141,8 @@ while True:
             mydb.rollback()
     
     if isPreset == False:
+        print("Sender not present in records")
+        client_sockets.send("Unknown Client".encode("ascii"))
         break
     
     # Store Kat, ts and lifetime in db, check if the key is valid
@@ -148,7 +150,7 @@ while True:
     Kat_b64 = ''
     now = datetime.datetime.now()
     formatted_time = now.strftime('%H:%M:%S')
-    lifetime = 600 # seconds
+    lifetime = 120 # seconds
 
     sql_check_kat = "SELECT ltk_key, ltk_ts, ltk_lifetime, ltk_nonce FROM long_term_key WHERE ltk_client=%s"
     sql_check_kat_data = [(sender)]
@@ -198,7 +200,7 @@ while True:
             Kat_b64 = b64encode(Kat).decode('utf-8')
             now = datetime.datetime.now()
             formatted_time = now.strftime('%H:%M:%S')
-            lifetime = 600 # seconds
+            lifetime = 120 # seconds
 
             # Store Kat in db (as it is a long-term key)
             sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
@@ -218,7 +220,8 @@ while True:
         Kat_b64 = b64encode(Kat).decode('utf-8')
         now = datetime.datetime.now()
         formatted_time = now.strftime('%H:%M:%S')
-        lifetime = 600 # second
+        lifetime = 120 # second
+
         # Store Kat in db (as it is a long-term key)
         sql_Kat = ("INSERT INTO long_term_key(ltk_client, ltk_key, ltk_ts, ltk_lifetime, ltk_nonce) VALUES (%s, %s, %s, %s, %s)")
         sql_Kat_data = (sender, Kat_b64, formatted_time, lifetime, nonce)
@@ -263,9 +266,5 @@ while True:
     Kas = b64decode(Kas_b64)
     Kst = b64decode(Kst_b64)
     sendTGT(Kat_b64, nonce, formatted_time, lifetime, Kst, sender, Kas)
-
-    # Breaking for demo
-    client_sockets.close()
-    break
-
+    
 mydb.close()

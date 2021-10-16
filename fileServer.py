@@ -110,6 +110,11 @@ while(True):
         # sending secret to client if Kab is valid
         msg_received = client_sockets.recv(4096)
         msg_received = msg_received.decode()
+
+        # if msg_received == "breakForNewKab":
+        #     print("message received from client about new Kab, breaking from I/O while loop\n")
+        #     break
+
         if(checkValidation(Kab_ts, Kab_lifetime) == False):
             final_message = encrypt("Session expired".encode(), Kab)
             
@@ -145,9 +150,6 @@ while(True):
             
             client_sockets.send(final_message.encode())
             print("\n[*] Sending encrypted secret to client\n")
-    client_sockets.close()
-    break
-
 
 
 

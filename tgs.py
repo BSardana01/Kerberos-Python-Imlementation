@@ -98,7 +98,7 @@ while(True):
         'Kab': Kab_b64,
         'sender': message_from_client_decrypted['sender'],
         'formatted_time': formatted_time,
-        'lifetime': 60
+        'lifetime': 30
     })
     pass_key_encrypted = encrypt(pass_key.encode(), b64decode(Kbt), "pass")
 
@@ -111,5 +111,3 @@ while(True):
     print("\n[*] Sending encrypted message to client", final_message)
     client_sockets.send(final_message.encode("ascii"))
 
-    client_sockets.close()
-    break

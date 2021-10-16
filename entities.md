@@ -22,7 +22,14 @@ Steps:
 
 Everytime, Kab expires, the client will send a request to TGS and TGS first checks if Kat is valid. If Kat expires at this point, a new Kat is created and for the the client has to send a request to the authServer
 
-TODO: 
+TODO for oct 16: 
 1. Change the structure of client, input should be read first in While True
 2. TGS should also check if Kat is valid not just authServer
 3. Use more functions everywhere
+
+Everything is working well
+
+TODO for oct 17:
+1. When client enters exit, send exiting message to all servers as well so they don't break
+2. client.py is in functions do that for all the servers as well
+3. Make a kill_sockets() function for all entities and use it whenever they're closed

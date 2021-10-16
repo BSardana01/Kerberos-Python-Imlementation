@@ -3,6 +3,7 @@
     Client receives the message and pass key 
     Client decrypts the message with his key Kas and gets Kat
     Client takes the pass and sends it to tgs as it is
+    Client uses Kab received from tgs to talk to fileServer
 '''
 import socket
 from base64 import b64encode, b64decode
@@ -71,8 +72,8 @@ def killSockets():
     server_socket_TGS.close()
     server_socket_FS.close()
 
-while True:
-    # send a request to auth server
+# Request Kat from authServer
+def checkWithAuthServer():
     nonce = uuid.uuid4().hex
     message = "a,b," + nonce
 
@@ -82,6 +83,12 @@ while True:
     msg_received = server_socket_AS.recv(4096)
     msg_received = msg_received.decode()
 
+    # exit if sender is not present in db
+    if msg_received == "Unknown Client":
+        print("Sender not present in records, exiting")
+        killSockets()
+        exit()
+    
     # get pass and encrypted message from authServer
     b64 = json.loads(msg_received)
     iv_client = b64["iv_client"]
@@ -97,7 +104,13 @@ while True:
     message_recieved_list = message_recieved.split(',')
     print("\n[*] Encrypted message received from authServer: \n", message_recieved_list)
     print("\n[*] Pass key received from authServer: \n", ciphertext_tgs)
-    
+
+    # return requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
+
+    return iv_tgs, ciphertext_tgs, message_recieved_list
+
+# Get Ticket Granting Ticket from TGS
+def requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list):
     Kat_b64 = message_recieved_list[0]
     nonce = message_recieved_list[1]
     ts = message_recieved_list[2]
@@ -139,6 +152,25 @@ while True:
 
     # Get pass and encrypted from tgs for fileServer
     print("\n[*] Message received from TGS: \n", msg_received)
+
+    return msg_received, Kat_b64
+
+def doTimeCheck(msg_received, formatted_time):
+    new_time = datetime.datetime.strptime(formatted_time, '%H:%M:%S')
+    new_time = new_time + datetime.timedelta(minutes=1)
+    new_time = new_time.time().strftime('%H:%M')
+    print("\n[*] Current time +1: ", new_time)
+
+    # TCheck = False
+    if(new_time == msg_received):
+        print("\n[*] Time check successfull")
+        return True
+    else:
+        print("\n[*] Time check failed")
+        return False
+
+def checkWithFS(msg_received, Kat_b64):
+    # Get pass and encrypted from tgs for fileServer
     b64 = json.loads(msg_received)
 
     iv_client = b64["iv_client"]
@@ -195,57 +227,74 @@ while True:
 
     if(message_from_fs_decrypted == "Incorrect decryption"):
         print("\n[*] Incorrect Kab")
-        break
+        return
 
     msg_received = message_from_fs_decrypted
     print("\n[*] T received from FileServer: ", msg_received)
 
-    new_time = datetime.datetime.strptime(formatted_time, '%H:%M:%S')
-    new_time = new_time + datetime.timedelta(minutes=1)
-    new_time = new_time.time().strftime('%H:%M')
-    print("\n[*] Current time +1: ", new_time)
-
-    TCheck = False
-    if(new_time == msg_received):
-        print("\n[*] Time check successfull")
-        TCheck = True
-    else:
-        print("\n[*] Time check failed")
-        break
+    TCheck = doTimeCheck(msg_received, formatted_time)
 
     if TCheck == True:
-        # request secret message
-        while True:
-            final_message = input("Enter request: (getSecretA, getSecretB): ")
-            final_message_exit = final_message
-            # final_message = "giveSecret"
-            
-            final_message = encrypt(final_message.encode(), b64decode(Kab_b64))
-                
-            print("\n[*] Requesting secret message from FileServer\n")
-            server_socket_FS.send(final_message.encode())
-
-            if(final_message_exit == "exit"):
-                killSockets()
-                break
-            # get secret message
-            msg_received = server_socket_FS.recv(4096)
-            msg_received = msg_received.decode()
-
-            b64 = json.loads(msg_received)
-            iv_pass = b64["iv_pass"]
-            ciphertext_pass = b64["ciphertext_pass"]
-            message_to_decrypt = json.dumps({'iv_client':iv_pass, 'ciphertext_client':ciphertext_pass, 'key':Kab_b64})
-            message_from_fs_decrypted = decrypt(message_to_decrypt).decode()
-
-            print("\n[*] Secret received from fileServer: ", message_from_fs_decrypted)
+        return Kab_b64
     else:
-        print("\n[*] Time check failed")
-        killSockets()
-        break
+        return "Invalid fileServer"
 
-    # server_socket_AS.close()
-    # server_socket_TGS.close()
-    # server_socket_FS.close()
-    killSockets()
-    break
+def main():
+    # For first execution
+    Kab_b64 = "NotSet"
+    Kat_b64 = "NotSet"
+    # running client
+    while True:
+        if Kab_b64 == "NotSet":
+            # first validate sender and requested service
+            iv_tgs, ciphertext_tgs, message_recieved_list = checkWithAuthServer()
+
+            # send request to TGS
+            msg_received_TGS, Kat_b64 =  requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
+
+            Kab_b64 = checkWithFS(msg_received_TGS, Kat_b64)
+            if Kab_b64 == "Invalid fileServer":
+                print("FileServer is not trustable, exiting...")
+                break
+
+        # send request to fileServer
+        final_message = input("Enter request to server: (getSecretA, getSecretB, `exit` to quit the program) ")
+        final_message_exit = final_message
+        
+        final_message = encrypt(final_message.encode(), b64decode(Kab_b64))
+
+        print("\n[*] Requesting secret message from FileServer\n")
+        server_socket_FS.send(final_message.encode())
+        if(final_message_exit == "exit"):
+            killSockets()
+            break
+
+        # get secret message
+        msg_received = server_socket_FS.recv(4096)
+        msg_received = msg_received.decode()
+
+        b64 = json.loads(msg_received)
+        iv_pass = b64["iv_pass"]
+        ciphertext_pass = b64["ciphertext_pass"]
+
+        message_to_decrypt = json.dumps({'iv_client':iv_pass, 'ciphertext_client':ciphertext_pass, 'key':Kab_b64})
+        message_from_fs_decrypted = decrypt(message_to_decrypt).decode()
+
+        print("\n[*] Secret received from fileServer: ", message_from_fs_decrypted)
+        # If Kab has expired, create a new one
+        if message_from_fs_decrypted == "Session expired":
+            print("[*] Session key expired, acquiring a new one...\n")
+            iv_tgs, ciphertext_tgs, message_recieved_list = checkWithAuthServer()
+
+            # send request to TGS
+            msg_received_TGS, Kat_b64 =  requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
+
+            Kab_b64 = checkWithFS(msg_received_TGS, Kat_b64)
+            if Kab_b64 == "Invalid fileServer":
+                print("[*] FileServer is not trustable, exiting...")
+                break
+
+            print("[*] New session key created, try that again\n")
+        
+if __name__=="__main__":
+    main()
