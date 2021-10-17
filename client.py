@@ -55,15 +55,14 @@ def encrypt(data, key):
 
     return result
 
-def killSockets():
-    server_socket_AS.close()
-    server_socket_TGS.close()
-    server_socket_FS.close()
-
 def sendExitToServers():
     server_socket_AS.send("exit".encode())
     server_socket_TGS.send("exit".encode())
     server_socket_FS.send("exit".encode())
+    server_socket_AS.close()
+    server_socket_TGS.close()
+    server_socket_FS.close()
+    exit()
 
 # Request Kat from authServer
 def checkWithAuthServer():
@@ -80,8 +79,6 @@ def checkWithAuthServer():
     if msg_received == "Unknown Client":
         print("\n[*] Sender not present in records, exiting...")
         sendExitToServers()
-        killSockets()
-        exit()
     
     # get pass and encrypted message from authServer
     b64 = json.loads(msg_received)
@@ -245,13 +242,10 @@ def createKab():
     if Kab_b64 == "Invalid fileServer":
         print("\n[*] FileServer is not trustable, exiting...")
         sendExitToServers()
-        killSockets()
-        exit()
+
     elif Kab_b64 == "IncorrectKab":
         print("\n[*] Incorrect Kab, exiting...")
         sendExitToServers()
-        killSockets()
-        exit()
     
     return Kab_b64
 def main():
@@ -273,8 +267,6 @@ def main():
         server_socket_FS.send(final_message.encode())
         if(final_message_exit == "exit"):
             sendExitToServers()
-            killSockets()
-            exit()
 
         # get secret message
         msg_received = server_socket_FS.recv(4096)
