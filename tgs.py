@@ -6,9 +6,11 @@ from Crypto.Cipher import AES
 from Crypto import Random
 import datetime
 
+from utilities import decrypt
 # shared key with authServer (long term)
 Kst = "m2ao3jabyAOswVJn6Fp4zA=="
 Kbt = "tSJf8oFYd7LZkmhL+AGTog=="
+
 # setting up socket
 server_socket = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 LOCALHOST = '127.0.0.2'
@@ -34,25 +36,19 @@ def encrypt(data, key, msg):
     else:
         result = json.dumps({'iv_client': iv, 'ciphertext_client': ct})
         return result
-
-def decrypt(json_input):
-    try:
-        b64 = json.loads(json_input)
-        iv = b64decode(b64['iv_client'])
-        ct = b64decode(b64['ciphertext_client'])
-        key = b64decode(b64['key'])
-
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        pt = unpad(cipher.decrypt(ct), AES.block_size)
-        return pt
-    except ValueError:
-        return "Incorrect decryption"
+        
+def killSockets():
+    client_sockets.close()
 
 while(True):
     # Get request from client
     msg_received = client_sockets.recv(4096)
     msg_received = msg_received.decode()
 
+    if msg_received == "exit":
+        print("[*] Exiting...")
+        killSockets()
+        exit()
     print("\n[*] Message received from client: \n", msg_received)
 
     b64 = json.loads(msg_received)

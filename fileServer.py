@@ -5,6 +5,8 @@ import json
 from Crypto.Cipher import AES
 import datetime
 
+from utilities import checkValidation, decrypt
+
 Kbt = "tSJf8oFYd7LZkmhL+AGTog=="
 secret_owned_by_fs_A = "$$$$Extremely Secret First Message$$$$"
 secret_owned_by_fs_B = "###$$$SECRETB"
@@ -30,35 +32,12 @@ def encrypt(data, key):
     result = json.dumps({'iv_pass': iv, 'ciphertext_pass': ct})
     return result
 
-def decrypt(json_input):
-    try:
-        b64 = json.loads(json_input)
-        iv = b64decode(b64['iv_client'])
-        ct = b64decode(b64['ciphertext_client'])
-        key = b64decode(b64['key'])
+def sendMessageToClient(final_message, Kab):
+    final_message = encrypt(final_message.encode(), Kab)       
+    client_sockets.send(final_message.encode())
 
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        pt = unpad(cipher.decrypt(ct), AES.block_size)
-        return pt
-    except ValueError:
-        return "\n[*] Incorrect decryption"
-
-# Check if a key is valid or not
-def checkValidation(ts, lifetime):
-    valid_until = datetime.datetime.strptime(ts, '%H:%M:%S')
-    valid_until = valid_until + datetime.timedelta(seconds=int(lifetime))
-    valid_until = valid_until.time()
-
-    now = datetime.datetime.now()
-    current_time = now.strftime('%H:%M:%S')
-    current_time = datetime.datetime.strptime(current_time, '%H:%M:%S')
-
-    if(current_time.time() < valid_until):
-        # print("[*] Key still valid")
-        return True
-    else:
-        # print("[*] Invalid key")
-        return False
+def killSockets():
+    client_sockets.close()
 
 while(True):
     # Get request from client
@@ -111,9 +90,10 @@ while(True):
         msg_received = client_sockets.recv(4096)
         msg_received = msg_received.decode()
 
-        # if msg_received == "breakForNewKab":
-        #     print("message received from client about new Kab, breaking from I/O while loop\n")
-        #     break
+        if msg_received == "exit":
+            print("[*] Exiting...")
+            killSockets()
+            exit()
 
         if(checkValidation(Kab_ts, Kab_lifetime) == False):
             final_message = encrypt("Session expired".encode(), Kab)
@@ -128,27 +108,22 @@ while(True):
         message_from_client = json.dumps({'iv_client': iv_to_fs, 'ciphertext_client': ciphertext_to_fs, 'key': Kab_b64})
         message_from_client_decrypted = decrypt(message_from_client).decode()
 
-        if(message_from_client_decrypted == "getSecretA"):
+        if(message_from_client_decrypted == "first"):
             # send secret
             final_message = secret_owned_by_fs_A
-            final_message = encrypt(final_message.encode(), Kab)
-            
-            client_sockets.send(final_message.encode())
+            sendMessageToClient(final_message, Kab)
             print("\n[*] Sending encrypted secret to client\n")
-        elif(message_from_client_decrypted == "getSecretB"):
+        
+        elif(message_from_client_decrypted == "second"):
             # send secret
             final_message = secret_owned_by_fs_B
-            final_message = encrypt(final_message.encode(), Kab)
-            
-            client_sockets.send(final_message.encode())
+            sendMessageToClient(final_message, Kab)
             print("\n[*] Sending encrypted secret to client\n")
-        elif(message_from_client_decrypted == "exit"):
-            break
+        
         else:
             # send response
-            final_message = encrypt("Incorrect Request".encode(), Kab)
-            
-            client_sockets.send(final_message.encode())
+            final_message = "Incorrect Request"
+            sendMessageToClient(final_message, Kab)
             print("\n[*] Sending encrypted secret to client\n")
 
 

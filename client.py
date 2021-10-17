@@ -14,6 +14,7 @@ from Crypto.Cipher import AES
 import mysql.connector
 import datetime
 
+from utilities import decrypt
 # shared key with authServer (long term)
 Kas = "AGsa0AIzNvVtAG1Az4FSdg=="
 
@@ -44,19 +45,6 @@ mydb = mysql.connector.connect(
 )
 
 # setting up aes
-def decrypt(json_input):
-    try:
-        b64 = json.loads(json_input)
-        iv = b64decode(b64['iv_client'])
-        ct = b64decode(b64['ciphertext_client'])
-        key = b64decode(b64['key'])
-
-        cipher = AES.new(key, AES.MODE_CBC, iv)
-        pt = unpad(cipher.decrypt(ct), AES.block_size)
-        return pt
-    except ValueError:
-        return "\n[*] Incorrect decryption"
-
 def encrypt(data, key):
     cipher = AES.new(key, AES.MODE_CBC)
     ct_bytes = cipher.encrypt(pad(data, AES.block_size))
@@ -72,6 +60,11 @@ def killSockets():
     server_socket_TGS.close()
     server_socket_FS.close()
 
+def sendExitToServers():
+    server_socket_AS.send("exit".encode())
+    server_socket_TGS.send("exit".encode())
+    server_socket_FS.send("exit".encode())
+
 # Request Kat from authServer
 def checkWithAuthServer():
     nonce = uuid.uuid4().hex
@@ -85,7 +78,8 @@ def checkWithAuthServer():
 
     # exit if sender is not present in db
     if msg_received == "Unknown Client":
-        print("Sender not present in records, exiting")
+        print("\n[*] Sender not present in records, exiting...")
+        sendExitToServers()
         killSockets()
         exit()
     
@@ -227,7 +221,7 @@ def checkWithFS(msg_received, Kat_b64):
 
     if(message_from_fs_decrypted == "Incorrect decryption"):
         print("\n[*] Incorrect Kab")
-        return
+        return "IncorrectKab"
 
     msg_received = message_from_fs_decrypted
     print("\n[*] T received from FileServer: ", msg_received)
@@ -239,6 +233,27 @@ def checkWithFS(msg_received, Kat_b64):
     else:
         return "Invalid fileServer"
 
+def createKab():
+    # first validate sender and requested service
+    iv_tgs, ciphertext_tgs, message_recieved_list = checkWithAuthServer()
+
+    # send request to TGS
+    msg_received_TGS, Kat_b64 =  requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
+    
+    Kab_b64 = checkWithFS(msg_received_TGS, Kat_b64)
+    
+    if Kab_b64 == "Invalid fileServer":
+        print("\n[*] FileServer is not trustable, exiting...")
+        sendExitToServers()
+        killSockets()
+        exit()
+    elif Kab_b64 == "IncorrectKab":
+        print("\n[*] Incorrect Kab, exiting...")
+        sendExitToServers()
+        killSockets()
+        exit()
+    
+    return Kab_b64
 def main():
     # For first execution
     Kab_b64 = "NotSet"
@@ -246,19 +261,10 @@ def main():
     # running client
     while True:
         if Kab_b64 == "NotSet":
-            # first validate sender and requested service
-            iv_tgs, ciphertext_tgs, message_recieved_list = checkWithAuthServer()
-
-            # send request to TGS
-            msg_received_TGS, Kat_b64 =  requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
-
-            Kab_b64 = checkWithFS(msg_received_TGS, Kat_b64)
-            if Kab_b64 == "Invalid fileServer":
-                print("FileServer is not trustable, exiting...")
-                break
+            Kab_b64 = createKab()
 
         # send request to fileServer
-        final_message = input("Enter request to server: (getSecretA, getSecretB, `exit` to quit the program) ")
+        final_message = input("Enter request to server: (first, second, `exit` to quit the program) ")
         final_message_exit = final_message
         
         final_message = encrypt(final_message.encode(), b64decode(Kab_b64))
@@ -266,8 +272,9 @@ def main():
         print("\n[*] Requesting secret message from FileServer\n")
         server_socket_FS.send(final_message.encode())
         if(final_message_exit == "exit"):
+            sendExitToServers()
             killSockets()
-            break
+            exit()
 
         # get secret message
         msg_received = server_socket_FS.recv(4096)
@@ -284,16 +291,7 @@ def main():
         # If Kab has expired, create a new one
         if message_from_fs_decrypted == "Session expired":
             print("[*] Session key expired, acquiring a new one...\n")
-            iv_tgs, ciphertext_tgs, message_recieved_list = checkWithAuthServer()
-
-            # send request to TGS
-            msg_received_TGS, Kat_b64 =  requestTGT(iv_tgs, ciphertext_tgs, message_recieved_list)
-
-            Kab_b64 = checkWithFS(msg_received_TGS, Kat_b64)
-            if Kab_b64 == "Invalid fileServer":
-                print("[*] FileServer is not trustable, exiting...")
-                break
-
+            Kab_b64 = createKab()
             print("[*] New session key created, try that again\n")
         
 if __name__=="__main__":
