@@ -33,3 +33,5 @@ TODO for oct 17:
 1. When client enters exit, send exiting message to all servers as well so they don't break
 2. client.py is in functions do that for all the servers as well
 3. Make a kill_sockets() function for all entities and use it whenever they're closed
+
+Everything is working well
