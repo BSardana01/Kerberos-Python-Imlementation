@@ -44,6 +44,10 @@ while(True):
     msg_received = client_sockets.recv(4096)
     msg_received = msg_received.decode()
 
+    if msg_received == "exit":
+        print("[*] Exiting...")
+        killSockets()
+        exit()
     b64 = json.loads(msg_received)
     # pass key
     iv_pass = b64['iv_pass']
