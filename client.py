@@ -36,14 +36,6 @@ server_socket_AS.connect((LOCALHOST,port_AS))
 server_socket_TGS.connect((server_tgs,port_TGS))
 server_socket_FS.connect((server_fs,port_FS))
 
-# setting up db connection
-mydb = mysql.connector.connect(
-  host="localhost",
-  user="police",
-  password="6633",
-  database="kerberos"
-)
-
 # setting up aes
 def encrypt(data, key):
     cipher = AES.new(key, AES.MODE_CBC)
