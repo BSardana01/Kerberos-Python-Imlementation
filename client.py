@@ -11,7 +11,6 @@ from Crypto.Util.Padding import pad, unpad
 import uuid
 import json
 from Crypto.Cipher import AES
-import mysql.connector
 import datetime
 
 from utilities import decrypt
