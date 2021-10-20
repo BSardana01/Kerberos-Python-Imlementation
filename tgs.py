@@ -79,7 +79,7 @@ while(True):
     nonce1 = message_from_client_decrypted['nonce']
     now = datetime.datetime.now()
     formatted_time = now.strftime('%H:%M:%S')
-    lifetime = 600
+    lifetime = 30
 
     message_back_to_client = json.dumps({
         'Kab': Kab_b64,
